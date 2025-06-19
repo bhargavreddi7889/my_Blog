@@ -21,128 +21,68 @@ dotenv.config();
 // Create Express app
 const app = express();
 
-// 📁 Ensure uploads and blogs subdirectory exist BEFORE anything else
+// ✅ Ensure uploads directories exist
 const uploadsDir = path.join(__dirname, 'uploads');
 const blogUploadsDir = path.join(uploadsDir, 'blogs');
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('✅ Created uploads directory:', uploadsDir);
-}
-if (!fs.existsSync(blogUploadsDir)) {
-  fs.mkdirSync(blogUploadsDir, { recursive: true });
-  console.log('✅ Created blog uploads directory:', blogUploadsDir);
-}
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(blogUploadsDir)) fs.mkdirSync(blogUploadsDir, { recursive: true });
 
-// 🧪 Now it's safe to read contents
-console.log('Uploads directory path:', uploadsDir);
-try {
-  console.log('Files in uploads directory:', fs.readdirSync(uploadsDir));
-  console.log('Files in blogs directory:', fs.readdirSync(blogUploadsDir));
-} catch (err) {
-  console.warn('⚠️ Failed to read upload directories:', err.message);
-}
-
-// 📦 Configure file storage
+// 🗃️ Multer file upload config
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  }
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
 });
-
-// 📜 File type validation
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only JPEG, JPG, PNG, GIF, and WebP are allowed.'), false);
-  }
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  allowed.includes(file.mimetype)
+    ? cb(null, true)
+    : cb(new Error('❌ Invalid file type'), false);
 };
-
-// 🧱 Setup multer
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: fileFilter
-});
+const upload = multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 // 🧩 Middleware
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ limit: '30mb', extended: true }));
 
-
-
-
+// ✅ CORS Fix
 const allowedOrigins = [
   'https://my-blog-beta-five.vercel.app',
   'http://localhost:3000'
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS Not Allowed: ' + origin));
-    }
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error('CORS Not Allowed: ' + origin));
   },
   credentials: true,
 }));
 
-// 🔥 Handle OPTIONS preflight
-app.options('*', cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS Not Allowed: ' + origin));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: false
-}));
+// ✅ Helmet & Logger
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, contentSecurityPolicy: false }));
 app.use(morgan('dev'));
 
-// 🔗 Serve uploads statically
+// 📁 Serve static uploads
 app.use('/uploads', express.static(uploadsDir));
-app.use('/uploads', (req, res, next) => {
-  const fullPath = path.join(uploadsDir, req.url);
-  console.log(`Static file requested: ${req.url}`);
-  console.log(`File exists: ${fs.existsSync(fullPath)}`);
-  next();
-});
 
-
-
-
-// 🔁 Routes
+// 🔁 API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/comments', commentRoutes);
 
-// 🏠 Root route
+// 🏠 Root
 app.get('/', (req, res) => {
   res.send('Welcome to Blog API');
 });
 
-// 🔌 DB Connection
+// 🔌 MongoDB Connect
 const PORT = process.env.PORT || 5000;
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
-    console.log('✅ MongoDB connected successfully!');
-    app.listen(PORT, () => console.log(`🚀 Server running on port: ${PORT}`));
+    console.log('✅ MongoDB connected!');
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
-  .catch((error) => console.log(`❌ MongoDB connection error: ${error}`));
+  .catch((err) => console.error('❌ MongoDB connection error:', err));
