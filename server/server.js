@@ -21,29 +21,42 @@ dotenv.config();
 // Create Express app
 const app = express();
 
-// Configure file storage
+// 📁 Ensure uploads and blogs subdirectory exist BEFORE anything else
+const uploadsDir = path.join(__dirname, 'uploads');
+const blogUploadsDir = path.join(uploadsDir, 'blogs');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('✅ Created uploads directory:', uploadsDir);
+}
+if (!fs.existsSync(blogUploadsDir)) {
+  fs.mkdirSync(blogUploadsDir, { recursive: true });
+  console.log('✅ Created blog uploads directory:', blogUploadsDir);
+}
+
+// 🧪 Now it's safe to read contents
+console.log('Uploads directory path:', uploadsDir);
+try {
+  console.log('Files in uploads directory:', fs.readdirSync(uploadsDir));
+  console.log('Files in blogs directory:', fs.readdirSync(blogUploadsDir));
+} catch (err) {
+  console.warn('⚠️ Failed to read upload directories:', err.message);
+}
+
+// 📦 Configure file storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    let uploadPath = './uploads/';
-    
-    // Check if directory exists, if not create it
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    
-    cb(null, uploadPath);
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    // Generate unique filename with original extension
     const ext = path.extname(file.originalname);
     cb(null, `${uuidv4()}${ext}`);
   }
 });
 
-// Configure file filter
+// 📜 File type validation
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -51,29 +64,24 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Setup multer upload
+// 🧱 Setup multer
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 
-// Middleware for parsing JSON and form data
+// 🧩 Middleware
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ limit: '30mb', extended: true }));
 
-// Add additional headers to handle CORS
+// 🌐 CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle OPTIONS method
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
+  if (req.method === 'OPTIONS') return res.status(200).end();
   next();
 });
 
@@ -83,85 +91,47 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: false
 }));
 app.use(morgan('dev'));
 
-// Make uploads directory static - update the path to use absolute paths for Windows
-const uploadsPath = path.join(__dirname, 'uploads');
-app.use('/uploads', express.static(uploadsPath));
-
-// Log all static file requests for debugging
+// 🔗 Serve uploads statically
+app.use('/uploads', express.static(uploadsDir));
 app.use('/uploads', (req, res, next) => {
-  console.log(`Static file request: ${req.url}`);
-  const fullPath = path.join(uploadsPath, req.url);
-  console.log(`Full path: ${fullPath}`);
+  const fullPath = path.join(uploadsDir, req.url);
+  console.log(`Static file requested: ${req.url}`);
   console.log(`File exists: ${fs.existsSync(fullPath)}`);
   next();
 });
 
-console.log('Uploads directory path:', uploadsPath);
-console.log('Files in uploads directory:', fs.readdirSync(uploadsPath));
-
-try {
-  const blogsPath = path.join(uploadsPath, 'blogs');
-  if (fs.existsSync(blogsPath)) {
-    console.log('Files in blogs directory:', fs.readdirSync(blogsPath));
-  } else {
-    console.log('Blogs directory does not exist yet');
-  }
-} catch (err) {
-  console.error('Error checking blogs directory:', err);
-}
-
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-const blogUploadsDir = path.join(__dirname, 'uploads/blogs');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('Created uploads directory:', uploadsDir);
-}
-if (!fs.existsSync(blogUploadsDir)) {
-  fs.mkdirSync(blogUploadsDir, { recursive: true });
-  console.log('Created blog uploads directory:', blogUploadsDir);
-}
-
-// Setup global multer error handler
+// 🧯 Multer error handling
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        message: 'File size too large. Maximum size is 5MB.'
-      });
+      return res.status(400).json({ success: false, message: 'File too large. Max size is 5MB.' });
     }
-    return res.status(400).json({
-      success: false,
-      message: err.message
-    });
+    return res.status(400).json({ success: false, message: err.message });
   } else if (err) {
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
+    return res.status(500).json({ success: false, message: err.message });
   }
   next();
 });
 
-// Routes
+// 🔁 Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/comments', commentRoutes);
 
-// Root route
+// 🏠 Root route
 app.get('/', (req, res) => {
   res.send('Welcome to Blog API');
 });
 
-// MongoDB Connection
+// 🔌 DB Connection
 const PORT = process.env.PORT || 5000;
 mongoose
   .connect(process.env.MONGO_URI)
@@ -169,4 +139,4 @@ mongoose
     console.log('✅ MongoDB connected successfully!');
     app.listen(PORT, () => console.log(`🚀 Server running on port: ${PORT}`));
   })
-  .catch((error) => console.log(`MongoDB connection error: ${error}`)); 
+  .catch((error) => console.log(`❌ MongoDB connection error: ${error}`));
