@@ -79,22 +79,33 @@ app.use(express.urlencoded({ limit: '30mb', extended: true }));
 
 
 const allowedOrigins = [
-  'https://my-blog-beta-five.vercel.app', // your Vercel frontend
-  'http://localhost:3000' // dev mode
+  'https://my-blog-beta-five.vercel.app',
+  'http://localhost:3000'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS: ' + origin));
+      callback(new Error('CORS Not Allowed: ' + origin));
+    }
+  },
+  credentials: true,
+}));
+
+// 🔥 Handle OPTIONS preflight
+app.options('*', cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS Not Allowed: ' + origin));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(helmet({
