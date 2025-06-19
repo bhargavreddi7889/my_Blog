@@ -15,6 +15,10 @@ const {
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
+router.get('/test', (req, res) => {
+  res.json({ message: '✅ Blog routes working!' });
+});
+
 
 // Configure file storage
 const storage = multer.diskStorage({
